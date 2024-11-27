@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -213,32 +214,35 @@ func TestTryCatchBlock_Reuse(t *testing.T) {
 	tc.Try(func() error { return errors.New("error") }).Do()
 }
 
-// 测试并发安全性
+// TestTryCatchBlock_Concurrent tests thread safety of the TryCatchBlock
 func TestTryCatchBlock_Concurrent(t *testing.T) {
 	assert := assert.New(t)
-	tc := New()
+	const numGoroutines = 100
+	var caughtCount, executedCount int32
 	var wg sync.WaitGroup
-	iterations := 100
-	executionCount := 0
-	var mu sync.Mutex
+	wg.Add(numGoroutines)
 
-	for i := 0; i < iterations; i++ {
-		wg.Add(1)
-		go func(i int) {
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
 			defer wg.Done()
+			tc := New()
 			tc.Try(func() error {
-				if i%2 == 0 {
-					return errors.New("even error")
+				if id%2 == 0 {
+					return fmt.Errorf("error from goroutine %d", id)
 				}
 				return nil
 			}).Catch(func(err error) {
-				mu.Lock()
-				executionCount++
-				mu.Unlock()
-			}).Do()
+				atomic.AddInt32(&caughtCount, 1)
+				assert.Contains(err.Error(), "error from goroutine")
+			}).Finally(func() {
+				atomic.AddInt32(&executedCount, 1)
+			})
+			tc.Do()
 		}(i)
 	}
 
 	wg.Wait()
-	assert.Equal(iterations/2, executionCount, "should have caught errors for even iterations")
+
+	assert.Equal(numGoroutines/2, int(atomic.LoadInt32(&caughtCount)), "catch should be executed for half of the goroutines")
+	assert.Equal(numGoroutines, int(atomic.LoadInt32(&executedCount)), "finally should be executed for all goroutines")
 }

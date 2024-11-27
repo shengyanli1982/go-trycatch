@@ -2,84 +2,67 @@ package gotrycatch
 
 import (
 	"fmt"
-	"sync/atomic"
 )
 
-// TryCatchBlock defines an error handling block
-// TryCatchBlock 定义一个错误处理块，用于实现类似 try-catch 的错误处理机制
+// TryCatchBlock implements try-catch-finally error handling pattern
+// TryCatchBlock 实现类似于 try-catch-finally 的错误处理模式
 type TryCatchBlock struct {
-	try     func() error // Main execution function 主要执行函数
-	catch   func(error)  // Error handling function 错误处理函数
-	finally func()       // Cleanup function 清理函数
-	inUse   int32        // Atomic flag to indicate if the block is in use
+	try     func() error // Function to execute that may return an error
+	catch   func(error)  // Function to handle any errors from try
+	finally func()       // Function that always executes after try-catch
 }
 
-// New creates a new error handling block
-// New 创建并返回一个新的错误处理块实例
+// New returns a TryCatchBlock instance from the pool
+// New 从对象池中获取一个 TryCatchBlock 实例
 func New() *TryCatchBlock {
 	return &TryCatchBlock{}
 }
 
-// reset resets the error handling block
-// reset 重置错误处理块
+// reset cleans up the block and returns it to the pool
+// reset 清理块的状态并将其归还到对象池
 func (tc *TryCatchBlock) reset() {
 	tc.try = nil
 	tc.catch = nil
 	tc.finally = nil
-	atomic.StoreInt32(&tc.inUse, 0) // Reset the in-use flag
 }
 
-// Try adds the execution function to the block
-// Try 添加要执行的主函数，该函数可能返回错误
+// Try sets the main execution function
+// Try 设置主要执行函数，该函数可能产生错误
 func (tc *TryCatchBlock) Try(try func() error) *TryCatchBlock {
 	tc.try = try
 	return tc
 }
 
-// Catch adds the error handling function to the block
-// Catch 添加错误处理函数，用于处理 try 中发生的错误
+// Catch sets the error handling function
+// Catch 设置错误处理函数，用于处理来自 Try 的错误
 func (tc *TryCatchBlock) Catch(catch func(error)) *TryCatchBlock {
 	tc.catch = catch
 	return tc
 }
 
-// Finally adds the cleanup function to the block
-// Finally 添加最终清理函数，该函数总是会被执行
+// Finally sets the cleanup function that always executes
+// Finally 设置清理函数，该函数会在所有情况下都被执行
 func (tc *TryCatchBlock) Finally(finally func()) *TryCatchBlock {
 	tc.finally = finally
 	return tc
 }
 
-// Do executes the error handling block
-// Do 按顺序执行整个错误处理块：try、catch（如果发生错误）和 finally
+// Do executes the try-catch-finally block in sequence
+// Do 按顺序执行 try-catch-finally 流程，包括错误处理和 panic 恢复
 func (tc *TryCatchBlock) Do() {
-	// Ensure try function is not nil
-	// 确保 try 函数不为空
+	// Validate try function exists
+	// 验证 try 函数是否存在
 	if tc.try == nil {
 		return
 	}
 
-	// Use atomic operation to check and set the in-use flag
-	if !atomic.CompareAndSwapInt32(&tc.inUse, 0, 1) {
-		// If the block is already in use, return immediately
-		return
-	}
-
-	// Reset the error handling block
-	// 重置错误处理块
-	defer tc.reset()
-
-	// Execute finally function before function returns
-	// 确保在函数返回前执行 finally 函数
-	if tc.finally != nil {
-		defer func() { tc.finally() }()
-	}
-
-	// Handle panic and convert it to error
-	// 处理 panic 并将其转换为 error
+	// Recover from panics and convert them to errors
+	// 从 panic 中恢复并将其转换为标准错误
 	defer func() {
-		var err error
+		// Handle panic first
+		// 1. 首先处理 panic（如果有的话）
 		if r := recover(); r != nil {
+			var err error
 			switch v := r.(type) {
 			case error:
 				err = v
@@ -90,10 +73,20 @@ func (tc *TryCatchBlock) Do() {
 				tc.catch(err)
 			}
 		}
+
+		// Execute finally if it exists
+		// 2. 执行 finally（如果有的话）
+		if tc.finally != nil {
+			tc.finally()
+		}
+
+		// Reset the block
+		// 3. 最后执行 reset
+		tc.reset()
 	}()
 
-	// Execute try function and handle any errors
-	// 执行 try 函数并处理可能发生的错误
+	// Execute try and handle any returned errors
+	// 执行 try 函数并处理返回的错误
 	if err := tc.try(); err != nil && tc.catch != nil {
 		tc.catch(err)
 	}

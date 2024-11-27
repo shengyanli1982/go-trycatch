@@ -25,14 +25,14 @@ Ever wished Go had try-catch blocks? Well, wish granted! `go-trycatch` brings th
 
 # Why Choose go-trycatch?
 
--   **Simple API that sparks joy**: Like Marie Kondo for your error handling
--   **Flexible error handling**: Catch and handle errors with ease (Pokemon style)
--   **Panic protection**: Turns those heart-stopping panics into well-behaved errors
--   **Cleanup guaranteed**: Finally block runs even if your code throws a tantrum
--   **Diet-friendly**: Zero dependencies, won't bloat your project
--   **Chainable like your favorite necklace**: Write code that reads like a story
--   **Go-native friendly**: Works alongside Go's error handling like best buddies
--   **Thread safety**: Safe to use in concurrent code
+-   **Intuitive API Design**: Clean, expressive syntax that makes error handling a breeze
+-   **Flexible Error Management**: Comprehensive error handling with familiar try-catch patterns
+-   **Robust Panic Recovery**: Automatically converts panic situations into manageable errors
+-   **Guaranteed Cleanup**: Ensures resource cleanup with reliable finally block execution
+-   **Lightweight Integration**: Zero external dependencies for minimal project overhead
+-   **Fluent Method Chaining**: Enables clear, readable code flow through chainable operations
+-   **Native Go Compatibility**: Seamlessly integrates with Go's existing error handling patterns
+-   **Concurrency Consideration**: For concurrent scenarios, implement appropriate synchronization (e.g., `sync.Mutex`)
 
 # Installation
 
