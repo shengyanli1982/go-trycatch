@@ -32,6 +32,7 @@ Ever wished Go had try-catch blocks? Well, wish granted! `go-trycatch` brings th
 -   **Diet-friendly**: Zero dependencies, won't bloat your project
 -   **Chainable like your favorite necklace**: Write code that reads like a story
 -   **Go-native friendly**: Works alongside Go's error handling like best buddies
+-   **Thread safety**: Safe to use in concurrent code
 
 # Installation
 

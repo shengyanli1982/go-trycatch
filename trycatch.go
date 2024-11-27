@@ -2,6 +2,7 @@ package gotrycatch
 
 import (
 	"fmt"
+	"sync/atomic"
 )
 
 // TryCatchBlock defines an error handling block
@@ -10,6 +11,7 @@ type TryCatchBlock struct {
 	try     func() error // Main execution function 主要执行函数
 	catch   func(error)  // Error handling function 错误处理函数
 	finally func()       // Cleanup function 清理函数
+	inUse   int32        // Atomic flag to indicate if the block is in use
 }
 
 // New creates a new error handling block
@@ -24,6 +26,7 @@ func (tc *TryCatchBlock) reset() {
 	tc.try = nil
 	tc.catch = nil
 	tc.finally = nil
+	atomic.StoreInt32(&tc.inUse, 0) // Reset the in-use flag
 }
 
 // Try adds the execution function to the block
@@ -53,6 +56,12 @@ func (tc *TryCatchBlock) Do() {
 	// Ensure try function is not nil
 	// 确保 try 函数不为空
 	if tc.try == nil {
+		return
+	}
+
+	// Use atomic operation to check and set the in-use flag
+	if !atomic.CompareAndSwapInt32(&tc.inUse, 0, 1) {
+		// If the block is already in use, return immediately
 		return
 	}
 
