@@ -1,14 +1,7 @@
 package gotrycatch
 
 import (
-	"errors"
 	"fmt"
-)
-
-var (
-	// ErrorTryFuncNil is returned when the try function is nil
-	// ErrorTryFuncNil 在 try 函数为空时返回
-	ErrorTryFuncNil = errors.New("try function is nil")
 )
 
 // TryCatchBlock defines an error handling block
@@ -56,11 +49,11 @@ func (tc *TryCatchBlock) Finally(finally func()) *TryCatchBlock {
 
 // Do executes the error handling block
 // Do 按顺序执行整个错误处理块：try、catch（如果发生错误）和 finally
-func (tc *TryCatchBlock) Do() (err error) {
+func (tc *TryCatchBlock) Do() {
 	// Ensure try function is not nil
 	// 确保 try 函数不为空
 	if tc.try == nil {
-		return ErrorTryFuncNil
+		return
 	}
 
 	// Reset the error handling block
@@ -76,6 +69,7 @@ func (tc *TryCatchBlock) Do() (err error) {
 	// Handle panic and convert it to error
 	// 处理 panic 并将其转换为 error
 	defer func() {
+		var err error
 		if r := recover(); r != nil {
 			switch v := r.(type) {
 			case error:
@@ -91,10 +85,7 @@ func (tc *TryCatchBlock) Do() (err error) {
 
 	// Execute try function and handle any errors
 	// 执行 try 函数并处理可能发生的错误
-	err = tc.try()
-	if err != nil && tc.catch != nil {
+	if err := tc.try(); err != nil && tc.catch != nil {
 		tc.catch(err)
 	}
-
-	return err
 }
