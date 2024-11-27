@@ -1,6 +1,15 @@
 package gotrycatch
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	// ErrorTryFuncNil is returned when the try function is nil
+	// ErrorTryFuncNil 在 try 函数为空时返回
+	ErrorTryFuncNil = errors.New("try function is nil")
+)
 
 // TryCatchBlock defines an error handling block
 // TryCatchBlock 定义一个错误处理块，用于实现类似 try-catch 的错误处理机制
@@ -14,6 +23,14 @@ type TryCatchBlock struct {
 // New 创建并返回一个新的错误处理块实例
 func New() *TryCatchBlock {
 	return &TryCatchBlock{}
+}
+
+// reset resets the error handling block
+// reset 重置错误处理块
+func (tc *TryCatchBlock) reset() {
+	tc.try = nil
+	tc.catch = nil
+	tc.finally = nil
 }
 
 // Try adds the execution function to the block
@@ -40,13 +57,21 @@ func (tc *TryCatchBlock) Finally(finally func()) *TryCatchBlock {
 // Do executes the error handling block
 // Do 按顺序执行整个错误处理块：try、catch（如果发生错误）和 finally
 func (tc *TryCatchBlock) Do() (err error) {
+	// Ensure try function is not nil
+	// 确保 try 函数不为空
+	if tc.try == nil {
+		return ErrorTryFuncNil
+	}
+
+	// Reset the error handling block
+	// 重置错误处理块
+	defer tc.reset()
+
 	// Execute finally function before function returns
 	// 确保在函数返回前执行 finally 函数
-	defer func() {
-		if tc.finally != nil {
-			tc.finally()
-		}
-	}()
+	if tc.finally != nil {
+		defer func() { tc.finally() }()
+	}
 
 	// Handle panic and convert it to error
 	// 处理 panic 并将其转换为 error
