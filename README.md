@@ -32,7 +32,7 @@ Ever wished Go had try-catch blocks? Well, wish granted! `go-trycatch` brings th
 -   **Lightweight Integration**: Zero external dependencies for minimal project overhead
 -   **Fluent Method Chaining**: Enables clear, readable code flow through chainable operations
 -   **Native Go Compatibility**: Seamlessly integrates with Go's existing error handling patterns
--   **Concurrency Consideration**: For concurrent scenarios, implement appropriate synchronization (e.g., `sync.Mutex`)
+-   **Concurrency Safety**: Does not guarantee goroutine safety, ensure safety in concurrent scenarios yourself
 
 # Installation
 
