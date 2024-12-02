@@ -161,11 +161,11 @@ Let's be honest about what `go-trycatch` isn't:
             return ErrNotFound
         }).
         Catch(func(err error) {
-            // 在 Catch 中手动判断错误类型
+            // Manually check error type in Catch
             if errors.Is(err, ErrNotFound) {
-                fmt.Println("处理未找到错误")
+                fmt.Println("Handling not found error")
             } else {
-                fmt.Println("处理其他错误")
+                fmt.Println("Handling other errors")
             }
         }).
         Do()
@@ -186,16 +186,16 @@ Let's be honest about what `go-trycatch` isn't:
 
     New().
         Try(func() error {
-            return &CustomError{Code: 404, Message: "资源未找到"}
+            return &CustomError{Code: 404, Message: "Resource not found"}
         }).
         Catch(func(err error) {
-            // 手动进行类型断言和错误处理
+            // Manually handle error types in Catch
             if customErr, ok := err.(*CustomError); ok {
                 switch customErr.Code {
                 case 404:
-                    fmt.Println("处理 404 错误:", customErr.Message)
+                    fmt.Println("Handling 404 error:", customErr.Message)
                 case 500:
-                    fmt.Println("处理 500 错误:", customErr.Message)
+                    fmt.Println("Handling 500 error:", customErr.Message)
                 }
             }
         }).
