@@ -218,6 +218,7 @@ func TestTryCatchBlock_Reuse(t *testing.T) {
 		firstErrorCaught = true
 		assert.Equal("first error", err.Error())
 	}).Do()
+	tryCatch.Reset()
 
 	assert.True(firstTryExecuted, "first try block should be executed")
 	assert.True(firstErrorCaught, "first catch block should be executed")
@@ -235,6 +236,7 @@ func TestTryCatchBlock_Reuse(t *testing.T) {
 		secondErrorCaught = true
 		assert.Equal("second error", err.Error())
 	}).Do()
+	tryCatch.Reset()
 
 	assert.True(secondTryExecuted, "second try block should be executed")
 	assert.True(secondErrorCaught, "second catch block should be executed")
@@ -290,7 +292,7 @@ func TestTryCatchBlock_Nest(t *testing.T) {
 	assert.Equal(expectedOrder, executionOrder, "execution order should match expected sequence")
 }
 
-// TestTryCatchBlock_Concurrent tests thread safety of the TryCatchBlock
+// 测试并发执行
 func TestTryCatchBlock_Concurrent(t *testing.T) {
 	assert := assert.New(t)
 	const goroutineCount = 100
@@ -314,6 +316,47 @@ func TestTryCatchBlock_Concurrent(t *testing.T) {
 				atomic.AddInt32(&completionCount, 1)
 			})
 			tryCatch.Do()
+		}(i)
+	}
+
+	waitGroup.Wait()
+
+	assert.Equal(goroutineCount/2, int(atomic.LoadInt32(&errorCount)), "catch handler should be executed for half of the goroutines")
+	assert.Equal(goroutineCount, int(atomic.LoadInt32(&completionCount)), "finally handler should be executed for all goroutines")
+}
+
+// 测试并发执行，使用 sync.Pool 重用 TryCatchBlock 实例
+func TestTryCatchBlock_ConcurrentWithPool(t *testing.T) {
+	assert := assert.New(t)
+	const goroutineCount = 100
+	var errorCount, completionCount int32
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(goroutineCount)
+
+	pool := sync.Pool{
+		New: func() interface{} {
+			return New()
+		},
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go func(routineID int) {
+			defer waitGroup.Done()
+			tryCatch := pool.Get().(*TryCatchBlock)
+			tryCatch.Try(func() error {
+				if routineID%2 == 0 {
+					return fmt.Errorf("error from goroutine %d", routineID)
+				}
+				return nil
+			}).Catch(func(err error) {
+				atomic.AddInt32(&errorCount, 1)
+				assert.Contains(err.Error(), "error from goroutine")
+			}).Finally(func() {
+				atomic.AddInt32(&completionCount, 1)
+			})
+			tryCatch.Do()
+			tryCatch.Reset()
+			pool.Put(tryCatch)
 		}(i)
 	}
 

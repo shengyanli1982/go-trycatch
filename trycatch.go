@@ -79,10 +79,6 @@ func (tc *TryCatchBlock) Do() {
 		if tc.finally != nil {
 			tc.finally()
 		}
-
-		// Reset the block
-		// 3. 最后执行 Reset
-		tc.Reset()
 	}()
 
 	// Execute try and handle any returned errors
