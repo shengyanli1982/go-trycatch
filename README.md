@@ -144,6 +144,87 @@ New().
     Do()
 ```
 
+# Best Practices
+
+## 1. Instance Reusability
+
+The `TryCatchBlock` instance is designed to be reusable. When reusing an instance, always call the `Reset()` method between operations to ensure proper state management.
+
+```go
+// Initialize a reusable instance
+tryCatch := New().
+    Try(func() error {
+        return processResource(resource)
+    }).
+    Catch(func(err error) {
+        log.Printf("Resource processing error: %v", err)
+    }).
+    Finally(func() {
+        cleanupResource(resource)
+    }).
+    Do()
+
+// Reset the instance state
+tryCatch.Reset()
+
+// Reuse the instance for another operation
+tryCatch.Try(func() error {
+        return processSecondaryResource(secondaryResource)
+    }).
+    Catch(func(err error) {
+        log.Printf("Secondary resource processing error: %v", err)
+    }).
+    Finally(func() {
+        cleanupSecondaryResource(secondaryResource)
+    }).
+    Do()
+```
+
+## 2. Object Pooling with `sync.Pool`
+
+For high-throughput scenarios where `TryCatchBlock` instances are frequently created and destroyed, utilize `sync.Pool` to optimize memory allocation and reduce GC pressure.
+
+```go
+// Initialize a thread-safe pool of TryCatchBlock instances
+var tryCatchPool = sync.Pool{
+    New: func() interface{} {
+        return New()
+    },
+}
+
+func handleOperation() {
+    // Acquire an instance from the pool
+    tryCatch := tryCatchPool.Get().(*TryCatchBlock)
+
+    // Execute the operation
+    tryCatch.Try(func() error {
+        return processResource(resource)
+    }).
+    Catch(func(err error) {
+        log.Printf("Operation failed: %v", err)
+    }).
+    Finally(func() {
+        cleanupResource(resource)
+    }).
+    Do()
+
+    // Reset the instance state
+    tryCatch.Reset()
+
+    // Return the instance to the pool
+    tryCatchPool.Put(tryCatch)
+}
+
+// Concurrently handle multiple operations
+var wg sync.WaitGroup
+for i := 0; i < 1000; i++ {
+    wg.Add(1)
+    go handleOperation()
+}
+
+wg.Wait()
+```
+
 # Limitations
 
 Let's be honest about what `go-trycatch` isn't:

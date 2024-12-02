@@ -144,6 +144,87 @@ New().
     Do()
 ```
 
+# 最佳实践
+
+## 1. 实例复用
+
+`TryCatchBlock` 实例支持复用。在重复使用实例时，请务必在每次操作之间调用 `Reset()` 方法以确保状态正确重置。
+
+```go
+// 初始化一个可复用的实例
+tryCatch := New().
+    Try(func() error {
+        return processResource(resource)
+    }).
+    Catch(func(err error) {
+        log.Printf("资源处理错误：%v", err)
+    }).
+    Finally(func() {
+        cleanupResource(resource)
+    }).
+    Do()
+
+// 重置实例状态
+tryCatch.Reset()
+
+// 复用实例进行另一个操作
+tryCatch.Try(func() error {
+        return processSecondaryResource(secondaryResource)
+    }).
+    Catch(func(err error) {
+        log.Printf("次要资源处理错误：%v", err)
+    }).
+    Finally(func() {
+        cleanupSecondaryResource(secondaryResource)
+    }).
+    Do()
+```
+
+## 2. 使用 `sync.Pool` 进行对象池化
+
+在高并发场景下，如果需要频繁创建和销毁 `TryCatchBlock` 实例，可以使用 `sync.Pool` 来优化内存分配并减少垃圾回收压力。
+
+```go
+// 初始化一个线程安全的 TryCatchBlock 实例池
+var tryCatchPool = sync.Pool{
+    New: func() interface{} {
+        return New()
+    },
+}
+
+func handleOperation() {
+    // 从对象池获取实例
+    tryCatch := tryCatchPool.Get().(*TryCatchBlock)
+
+    // 执行操作
+    tryCatch.Try(func() error {
+        return processResource(resource)
+    }).
+    Catch(func(err error) {
+        log.Printf("操作失败：%v", err)
+    }).
+    Finally(func() {
+        cleanupResource(resource)
+    }).
+    Do()
+
+    // 重置实例状态
+    tryCatch.Reset()
+
+    // 将实例归还到对象池
+    tryCatchPool.Put(tryCatch)
+}
+
+// 并发执行多个操作
+var wg sync.WaitGroup
+for i := 0; i < 1000; i++ {
+    wg.Add(1)
+    go handleOperation()
+}
+
+wg.Wait()
+```
+
 # 使用限制
 
 为了保持透明，我们需要说明 `go-trycatch` 的一些限制：
