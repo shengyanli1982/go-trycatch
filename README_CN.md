@@ -151,7 +151,56 @@ New().
 -   不是 Go 原生错误处理的替代品（我们的目标是锦上添花，而非取而代之）
 -   不是性能至上的解决方案（为了便利性，会有些许性能开销）
 -   不能直接捕获指定的错误类型（但可以在 Catch 函数中自行实现）
+
+    ```go
+    // 示例：在 Catch 中处理特定错误类型
+    var ErrNotFound = errors.New("not found")
+
+    New().
+        Try(func() error {
+            return ErrNotFound
+        }).
+        Catch(func(err error) {
+            // 在 Catch 中手动判断错误类型
+            if errors.Is(err, ErrNotFound) {
+                fmt.Println("处理未找到错误")
+            } else {
+                fmt.Println("处理其他错误")
+            }
+        }).
+        Do()
+    ```
+
 -   不提供内置的错误类型匹配功能（需要在 Catch 函数中手动处理）
+
+    ```go
+    // 示例：在 Catch 中处理多种错误类型
+    type CustomError struct {
+        Code    int
+        Message string
+    }
+
+    func (e *CustomError) Error() string {
+        return e.Message
+    }
+
+    New().
+        Try(func() error {
+            return &CustomError{Code: 404, Message: "资源未找到"}
+        }).
+        Catch(func(err error) {
+            // 手动进行类型断言和错误处理
+            if customErr, ok := err.(*CustomError); ok {
+                switch customErr.Code {
+                case 404:
+                    fmt.Println("处理 404 错误:", customErr.Message)
+                case 500:
+                    fmt.Println("处理 500 错误:", customErr.Message)
+                }
+            }
+        }).
+        Do()
+    ```
 
 # 参与贡献
 

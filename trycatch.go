@@ -12,15 +12,15 @@ type TryCatchBlock struct {
 	finally func()       // Function that always executes after try-catch
 }
 
-// New returns a TryCatchBlock instance from the pool
-// New 从对象池中获取一个 TryCatchBlock 实例
+// New returns a TryCatchBlock instance
+// New 返回一个 TryCatchBlock 实例
 func New() *TryCatchBlock {
 	return &TryCatchBlock{}
 }
 
-// reset cleans up the block and returns it to the pool
-// reset 清理块的状态并将其归还到对象池
-func (tc *TryCatchBlock) reset() {
+// Reset cleans up the block state (useful for object pooling)
+// Reset 清理块的状态 (方便作为对象池复用)
+func (tc *TryCatchBlock) Reset() {
 	tc.try = nil
 	tc.catch = nil
 	tc.finally = nil
@@ -81,8 +81,8 @@ func (tc *TryCatchBlock) Do() {
 		}
 
 		// Reset the block
-		// 3. 最后执行 reset
-		tc.reset()
+		// 3. 最后执行 Reset
+		tc.Reset()
 	}()
 
 	// Execute try and handle any returned errors

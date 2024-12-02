@@ -151,7 +151,56 @@ Let's be honest about what `go-trycatch` isn't:
 -   A complete replacement for Go's error handling (we're here to complement, not conquer)
 -   The fastest thing in the world (there's a tiny performance cost for all this convenience)
 -   A magic wand for catching specific error types (though you can still do it with a bit of elbow grease)
+
+    ```go
+    // eg: handling specific error types in Catch
+    var ErrNotFound = errors.New("not found")
+
+    New().
+        Try(func() error {
+            return ErrNotFound
+        }).
+        Catch(func(err error) {
+            // 在 Catch 中手动判断错误类型
+            if errors.Is(err, ErrNotFound) {
+                fmt.Println("处理未找到错误")
+            } else {
+                fmt.Println("处理其他错误")
+            }
+        }).
+        Do()
+    ```
+
 -   No built-in support for catching specific error types (but you can implement this in your Catch function)
+
+    ```go
+    // eg: handling multiple error types in Catch
+    type CustomError struct {
+        Code    int
+        Message string
+    }
+
+    func (e *CustomError) Error() string {
+        return e.Message
+    }
+
+    New().
+        Try(func() error {
+            return &CustomError{Code: 404, Message: "资源未找到"}
+        }).
+        Catch(func(err error) {
+            // 手动进行类型断言和错误处理
+            if customErr, ok := err.(*CustomError); ok {
+                switch customErr.Code {
+                case 404:
+                    fmt.Println("处理 404 错误:", customErr.Message)
+                case 500:
+                    fmt.Println("处理 500 错误:", customErr.Message)
+                }
+            }
+        }).
+        Do()
+    ```
 
 # Contributing
 
