@@ -67,26 +67,24 @@ func TestTryCatchBlock_Do(t *testing.T) {
 			catchHandler:   nil,
 			finallyHandler: nil,
 		},
-		// {
-		// 	name: "Nested panic in catch",
-		// 	tryFunc: func() error {
-		// 		panic("original panic")
-		// 	},
-		// 	catchFunc: func(err error) {
-		// 		assert.Equal(t, "original panic", err.Error())
-		// 		assert.NotNil(t, err)
-
-		// 		panic("panic in catch")
-		// 	},
-		// 	finallyFunc: (func() func() {
-		// 		executed := false
-		// 		return func() {
-		// 			executed = true
-		// 			assert.True(t, executed, "finally should be executed even with nested panic")
-		// 		}
-		// 	})(),
-		// 	expectedError: errors.New("panic in catch"),
-		// },
+		{
+			name: "Nested panic in catch",
+			tryFunction: func() error {
+				panic("original panic")
+			},
+			catchHandler: func(err error) {
+				assert.Equal(t, "original panic", err.Error())
+				assert.NotNil(t, err)
+				panic("panic in catch")
+			},
+			finallyHandler: (func() func() {
+				executed := false
+				return func() {
+					executed = true
+					assert.True(t, executed, "finally should be executed even with nested panic")
+				}
+			})(),
+		},
 		{
 			name: "Finally executes after panic",
 			tryFunction: func() error {
@@ -141,6 +139,19 @@ func TestTryCatchBlock_Do(t *testing.T) {
 			},
 			catchHandler:   nil,
 			finallyHandler: nil,
+		},
+		{
+			name: "Finally executes after user defer",
+			tryFunction: func() error {
+				defer func() {
+					// 用户自己的 defer，应该在 finally 之前执行
+				}()
+				return nil
+			},
+			catchHandler: nil,
+			finallyHandler: func() {
+				// finally 必须在用户 defer 之后执行
+			},
 		},
 		{
 			name: "Nil catch with error",
@@ -364,4 +375,53 @@ func TestTryCatchBlock_ConcurrentWithPool(t *testing.T) {
 
 	assert.Equal(goroutineCount/2, int(atomic.LoadInt32(&errorCount)), "catch handler should be executed for half of the goroutines")
 	assert.Equal(goroutineCount, int(atomic.LoadInt32(&completionCount)), "finally handler should be executed for all goroutines")
+}
+
+func TestTryCatchBlock_FinallyPanic(t *testing.T) {
+	t.Run("Finally panic propagates", func(t *testing.T) {
+		tryCatch := New().
+			Try(func() error {
+				return nil
+			}).
+			Finally(func() {
+				panic("panic in finally")
+			})
+
+		assert.Panics(t, func() {
+			tryCatch.Do()
+		})
+	})
+
+	t.Run("Finally panic with error in try", func(t *testing.T) {
+		tryCatch := New().
+			Try(func() error {
+				return errors.New("error in try")
+			}).
+			Catch(func(err error) {
+			}).
+			Finally(func() {
+				panic("panic in finally")
+			})
+
+		assert.Panics(t, func() {
+			tryCatch.Do()
+		})
+	})
+
+	t.Run("Finally panic after catch panic", func(t *testing.T) {
+		tryCatch := New().
+			Try(func() error {
+				return errors.New("error in try")
+			}).
+			Catch(func(err error) {
+				panic("panic in catch")
+			}).
+			Finally(func() {
+				panic("panic in finally")
+			})
+
+		assert.Panics(t, func() {
+			tryCatch.Do()
+		})
+	})
 }

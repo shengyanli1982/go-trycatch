@@ -1,89 +1,129 @@
 package gotrycatch
 
 import (
+	"context"
 	"fmt"
 )
 
-// TryCatchBlock implements try-catch-finally error handling pattern
-// TryCatchBlock 实现类似于 try-catch-finally 的错误处理模式
+// TryCatchBlock 实现 try-catch-finally 错误处理模式
 type TryCatchBlock struct {
-	try     func() error // Function to execute that may return an error
-	catch   func(error)  // Function to handle any errors from try
-	finally func()       // Function that always executes after try-catch
+	try     func() error    // 待执行的函数，可能返回错误
+	catch   func(error)     // 错误处理函数
+	finally func()          // 清理函数，在所有情况下都会执行
+	ctx     context.Context // 用于取消和超时的上下文
+	hooks   Hooks           // 监控执行的钩子
+	name    string          // 块的名称标识符
 }
 
-// New returns a TryCatchBlock instance
 // New 返回一个 TryCatchBlock 实例
 func New() *TryCatchBlock {
 	return &TryCatchBlock{}
 }
 
-// Reset cleans up the block state (useful for object pooling)
-// Reset 清理块的状态 (方便作为对象池复用)
+// Reset 清理块的状态，用于对象池复用
+// 注意：Reset 只清理函数指针。如果闭包中捕获了敏感数据，需由调用方确保不会泄露
 func (tc *TryCatchBlock) Reset() {
 	tc.try = nil
 	tc.catch = nil
 	tc.finally = nil
 }
 
-// Try sets the main execution function
-// Try 设置主要执行函数，该函数可能产生错误
+// Try 设置待执行的函数
 func (tc *TryCatchBlock) Try(try func() error) *TryCatchBlock {
 	tc.try = try
 	return tc
 }
 
-// Catch sets the error handling function
-// Catch 设置错误处理函数，用于处理来自 Try 的错误
+// Catch 设置错误处理函数
 func (tc *TryCatchBlock) Catch(catch func(error)) *TryCatchBlock {
 	tc.catch = catch
 	return tc
 }
 
-// Finally sets the cleanup function that always executes
-// Finally 设置清理函数，该函数会在所有情况下都被执行
+// Finally 设置清理函数
 func (tc *TryCatchBlock) Finally(finally func()) *TryCatchBlock {
 	tc.finally = finally
 	return tc
 }
 
-// Do executes the try-catch-finally block in sequence
-// Do 按顺序执行 try-catch-finally 流程，包括错误处理和 panic 恢复
-func (tc *TryCatchBlock) Do() {
-	// Validate try function exists
-	// 验证 try 函数是否存在
+// Do 执行 try-catch-finally 流程，返回错误
+// 返回 try 返回的错误或 panic 转换的错误
+func (tc *TryCatchBlock) Do() error {
 	if tc.try == nil {
-		return
+		return nil
 	}
 
-	// Recover from panics and convert them to errors
-	// 从 panic 中恢复并将其转换为标准错误
+	// 检查 context 是否已取消
+	if tc.ctx != nil {
+		select {
+		case <-tc.ctx.Done():
+			return tc.ctx.Err()
+		default:
+		}
+	}
+
+	var catchCalled bool
+	var returnedErr error
+
 	defer func() {
-		// Handle panic first
-		// 1. 首先处理 panic（如果有的话）
+		// 处理 panic
 		if r := recover(); r != nil {
-			var err error
+			var panicErr error
 			switch v := r.(type) {
 			case error:
-				err = v
+				panicErr = v
 			default:
-				err = fmt.Errorf("%v", v)
+				panicErr = fmt.Errorf("%v", v)
 			}
-			if tc.catch != nil {
-				tc.catch(err)
+			if tc.hooks.OnCatch != nil {
+				tc.hooks.OnCatch(panicErr)
 			}
+			if tc.catch != nil && !catchCalled {
+				tc.catch(panicErr)
+			}
+			returnedErr = panicErr
 		}
 
-		// Execute finally if it exists
-		// 2. 执行 finally（如果有的话）
+		// 执行 OnFinally 钩子
+		if tc.hooks.OnFinally != nil {
+			tc.hooks.OnFinally()
+		}
+
+		// 执行 finally
 		if tc.finally != nil {
 			tc.finally()
 		}
 	}()
 
-	// Execute try and handle any returned errors
-	// 执行 try 函数并处理返回的错误
-	if err := tc.try(); err != nil && tc.catch != nil {
-		tc.catch(err)
+	// 执行 OnTryStart 钩子
+	if tc.hooks.OnTryStart != nil {
+		tc.hooks.OnTryStart()
 	}
+
+	// 执行 try 函数
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				catchCalled = true
+				panic(r)
+			}
+		}()
+		returnedErr = tc.try()
+	}()
+
+	// 执行 OnTryEnd 钩子
+	if tc.hooks.OnTryEnd != nil {
+		tc.hooks.OnTryEnd(returnedErr)
+	}
+
+	// 如果有错误，执行 catch
+	if returnedErr != nil && tc.catch != nil {
+		catchCalled = true
+		if tc.hooks.OnCatch != nil {
+			tc.hooks.OnCatch(returnedErr)
+		}
+		tc.catch(returnedErr)
+	}
+
+	return returnedErr
 }
