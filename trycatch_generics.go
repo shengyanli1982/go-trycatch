@@ -8,14 +8,12 @@ import (
 func TryWithResult[T any](fn func() (T, error)) (result T, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			var panicErr error
 			switch v := r.(type) {
 			case error:
-				panicErr = v
+				err = v
 			default:
-				panicErr = fmt.Errorf("%v", v)
+				err = fmt.Errorf("%v", v)
 			}
-			panic(panicErr)
 		}
 	}()
 
@@ -25,19 +23,16 @@ func TryWithResult[T any](fn func() (T, error)) (result T, err error) {
 // TryWithResultAndFinally 类似 TryWithResult，但额外接受 finally 处理器
 func TryWithResultAndFinally[T any](fn func() (T, error), finally func()) (result T, err error) {
 	defer func() {
-		if finally != nil {
-			finally()
-		}
-
 		if r := recover(); r != nil {
-			var panicErr error
 			switch v := r.(type) {
 			case error:
-				panicErr = v
+				err = v
 			default:
-				panicErr = fmt.Errorf("%v", v)
+				err = fmt.Errorf("%v", v)
 			}
-			panic(panicErr)
+		}
+		if finally != nil {
+			finally()
 		}
 	}()
 

@@ -28,11 +28,24 @@ func TestTryWithResult_WithError(t *testing.T) {
 }
 
 func TestTryWithResult_WithPanic(t *testing.T) {
-	assert.Panics(t, func() {
-		TryWithResult(func() (int, error) {
-			panic("panic error")
-		})
+	result, err := TryWithResult(func() (int, error) {
+		panic("panic error")
 	})
+
+	assert.Error(t, err, "panic should be converted to error, not re-panicked")
+	assert.Equal(t, "panic error", err.Error())
+	assert.Equal(t, 0, result, "result should be zero value on panic")
+}
+
+func TestTryWithResult_WithTypedError(t *testing.T) {
+	myErr := errors.New("typed panic")
+	result, err := TryWithResult(func() (int, error) {
+		panic(myErr)
+	})
+
+	assert.Error(t, err)
+	assert.Equal(t, myErr, err, "should preserve original error from panic")
+	assert.Equal(t, 0, result)
 }
 
 func TestTryWithResultAndFinally_Success(t *testing.T) {
@@ -71,16 +84,18 @@ func TestTryWithResultAndFinally_WithError(t *testing.T) {
 
 func TestTryWithResultAndFinally_WithPanic(t *testing.T) {
 	finallyCalled := false
-	assert.Panics(t, func() {
-		TryWithResultAndFinally(
-			func() (int, error) {
-				panic("panic error")
-			},
-			func() {
-				finallyCalled = true
-			},
-		)
-	})
+	result, err := TryWithResultAndFinally(
+		func() (int, error) {
+			panic("panic error")
+		},
+		func() {
+			finallyCalled = true
+		},
+	)
+
+	assert.Error(t, err, "panic should be converted to error, not re-panicked")
+	assert.Equal(t, "panic error", err.Error())
+	assert.Equal(t, 0, result, "result should be zero value on panic")
 	assert.True(t, finallyCalled, "finally should be called even with panic")
 }
 
