@@ -1,48 +1,27 @@
-<div align="center">
+<p align="center">
   <img src="assets/logo.png" alt="go-trycatch logo" width="350px">
+</p>
 
-# go-trycatch
+<h1 align="center">go-trycatch</h1>
 
-**Try-catch-finally error handling pattern for Go, the idiomatic way.**
+<p align="center"><strong>Try-catch-finally for Go, done right.</strong></p>
 
-go-trycatch brings the familiar try-catch-finally pattern to Go without fighting the language's philosophy. It complements Go's error handling, adds panic recovery, and returns errors properly.
+<p align="center">
+  <a href="https://goreportcard.com/report/github.com/shengyanli1982/go-trycatch"><img alt="Go Report Card" src="https://goreportcard.com/badge/github.com/shengyanli1982/go-trycatch"></a>
+  <a href="https://github.com/shengyanli1982/go-trycatch/actions/workflows/test.yaml"><img alt="Build Status" src="https://github.com/shengyanli1982/go-trycatch/actions/workflows/test.yaml/badge.svg"></a>
+  <a href="https://pkg.go.dev/github.com/shengyanli1982/go-trycatch"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/shengyanli1982/go-trycatch.svg"></a>
+  <a href="https://deepwiki.com/shengyanli1982/law"><img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg"></a>
+</p>
 
-</div>
+go-trycatch adds the familiar try-catch-finally pattern to Go. Panics are recovered and converted to errors, `finally` always runs, and `Do()` returns a proper Go error. No exceptions hierarchy, no surprises, zero dependencies.
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/shengyanli1982/go-trycatch)](https://goreportcard.com/report/github.com/shengyanli1982/go-trycatch)
-[![Build Status](https://github.com/shengyanli1982/go-trycatch/actions/workflows/test.yaml/badge.svg)](https://github.com/shengyanli1982/go-trycatch/actions)
-[![Go Reference](https://pkg.go.dev/badge/github.com/shengyanli1982/go-trycatch.svg)](https://pkg.go.dev/github.com/shengyanli1982/go-trycatch)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/shengyanli1982/go-trycatch)
-
-## Why go-trycatch
-
-When Go's `if err != nil` pattern feels too manual, go-trycatch fills the gap without compromising Go semantics.
-
-- **Familiar pattern**: try-catch-finally syntax for teams coming from other languages
-- **Panic recovery**: automatically converts panics to errors you can handle
-- **Returns errors**: `Do()` returns `error` - works with Go's error philosophy
-- **Context support**: cancellation and timeout via standard `context.Context`
-- **Hooks for observability**: `OnTryStart`, `OnTryEnd`, `OnCatch`, `OnFinally`
-- **Zero dependencies**: only uses Go standard library
-
-## What You Get Out of the Box
-
-| Area            | What go-trycatch Provides                                            |
-| --------------- | -------------------------------------------------------------------- |
-| Core pattern    | `Try`, `Catch`, `Finally` chainable API                              |
-| Panic handling  | automatic `recover()` and conversion to `error`                      |
-| Error handling  | `Do()` returns the error from try or panic                           |
-| Generic support | `TryWithResult[T]` for type-safe results                             |
-| Context         | `WithContext(ctx)` for cancellation and timeout control              |
-| Observability   | `Hooks` struct with `OnTryStart`, `OnTryEnd`, `OnCatch`, `OnFinally` |
-| Object pooling  | `Reset()` + `sync.Pool` for high-throughput scenarios                |
-| Dependencies    | zero external dependencies                                           |
-
-## Quick Start
+## Install
 
 ```bash
 go get github.com/shengyanli1982/go-trycatch
 ```
+
+## Quick Start
 
 ```go
 package main
@@ -55,74 +34,99 @@ import (
 )
 
 func main() {
-	// Basic usage
 	err := gtc.New().
 		Try(func() error {
 			return errors.New("something went wrong")
 		}).
 		Catch(func(err error) {
-			fmt.Printf("Caught error: %v\n", err)
+			fmt.Printf("caught: %v\n", err)
 		}).
 		Finally(func() {
-			fmt.Println("Cleanup here")
+			fmt.Println("cleanup")
 		}).
 		Do()
 
-	if err != nil {
-		fmt.Printf("Do() returned error: %v\n", err)
-	}
+	fmt.Printf("returned: %v\n", err)
 }
+// caught: something went wrong
+// cleanup
+// returned: something went wrong
 ```
 
-Test it:
+## Features
 
-```bash
-go run demo.go
-# Caught error: something went wrong
-# Cleanup here
-# Do() returned error: something went wrong
+| Feature             | Description                                                        |
+| ------------------- | ------------------------------------------------------------------ |
+| Chainable API       | `Try`, `Catch`, `Finally` compose fluently                         |
+| Panic recovery      | Panics in try/catch are captured and converted to `error`          |
+| `finally` guarantee | Always executes — even when catch panics                           |
+| Generic return      | `TryWithResult[T]` and `TryCatchR[T]` for typed results            |
+| Context-aware       | `TryCtx` + `WithContext(ctx)` for cancellation and timeouts        |
+| Hooks               | `OnTryStart`, `OnTryEnd`, `OnCatch`, `OnFinally` for observability |
+| Object pooling      | `Reset()` + `sync.Pool` for zero-allocation reuse                  |
+| Zero dependencies   | Standard library only                                              |
+
+## Core API
+
+```go
+// Constructor
+func New() *TryCatchBlock
+func NewWithOptions(opts ...Option) *TryCatchBlock
+
+// Chainable methods
+func (tc *TryCatchBlock) Try(fn func() error) *TryCatchBlock
+func (tc *TryCatchBlock) TryCtx(fn func(context.Context) error) *TryCatchBlock
+func (tc *TryCatchBlock) Catch(fn func(error)) *TryCatchBlock
+func (tc *TryCatchBlock) Finally(fn func()) *TryCatchBlock
+func (tc *TryCatchBlock) ApplyOptions(opts ...Option) *TryCatchBlock
+func (tc *TryCatchBlock) Reset()
+
+// Execute
+func (tc *TryCatchBlock) Do() error
 ```
-
-## API Reference
-
-### Core Methods
-
-| Method    | Signature                           | Description                              |
-| --------- | ----------------------------------- | ---------------------------------------- |
-| `New`     | `func() *TryCatchBlock`             | Creates a new TryCatchBlock instance     |
-| `Try`     | `func(func() error) *TryCatchBlock` | Sets the function to execute             |
-| `Catch`   | `func(func(error)) *TryCatchBlock`  | Sets the error handler                   |
-| `Finally` | `func(func()) *TryCatchBlock`       | Sets the cleanup function                |
-| `Do`      | `func() error`                      | Executes the chain and returns the error |
-| `Reset`   | `func()`                            | Clears state for object pool reuse       |
 
 ### Options
 
-| Option        | Description                                     |
-| ------------- | ----------------------------------------------- |
-| `WithContext` | Adds `context.Context` for cancellation/timeout |
-| `WithHooks`   | Adds observability hooks                        |
-| `WithName`    | Adds a name identifier                          |
-
-### Generic Functions
-
-| Function                  | Signature                                               | Description                    |
-| ------------------------- | ------------------------------------------------------- | ------------------------------ |
-| `TryWithResult`           | `func(fn func() (T, error)) (T, error)`                 | Generic try with result return |
-| `TryWithResultAndFinally` | `func(fn func() (T, error), finally func()) (T, error)` | Generic try with finally       |
-
-### Hooks Structure
+| Option             | Description                       |
+| ------------------ | --------------------------------- |
+| `WithContext(ctx)` | Adds cancellation/timeout support |
+| `WithHooks(hooks)` | Registers observability callbacks |
+| `WithName(name)`   | Assigns an identifier             |
 
 ```go
 type Hooks struct {
-    OnTryStart func()      // Called before try executes
-    OnTryEnd   func(error) // Called after try executes, with result error
-    OnCatch    func(error) // Called when catch executes
-    OnFinally  func()      // Called when finally executes
+    OnTryStart func()
+    OnTryEnd   func(error)
+    OnCatch    func(error)
+    OnFinally  func()
 }
 ```
 
-## Usage Examples
+## Generic Functions
+
+For operations that return a typed value, use the generic helpers instead of `Do()`:
+
+```go
+// Panic-only recovery
+result, err := gtc.TryWithResult(func() (int, error) {
+    return 42, nil
+})
+
+// With finally cleanup
+result, err := gtc.TryWithResultAndFinally(
+    func() (string, error) { return "hello", nil },
+    func() { fmt.Println("cleanup") },
+)
+
+// Full try-catch-finally with typed result
+result, err := gtc.TryCatchR(
+    func() (int, error) { return computeResult() },
+    func(err error) { log.Printf("error: %v", err) },
+    func() { fmt.Println("always runs") },
+)
+```
+
+## Usage Patterns
 
 ### Panic Recovery
 
@@ -132,115 +136,95 @@ gtc.New().
         panic("unexpected error")
     }).
     Catch(func(err error) {
-        fmt.Printf("Caught panic as error: %v\n", err)
+        fmt.Printf("caught panic: %v\n", err) // caught panic: unexpected error
     }).
     Do()
 ```
 
-### With Context
+### Context Cancellation
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 defer cancel()
 
-gtc.New().
+err := gtc.New().
     ApplyOptions(gtc.WithContext(ctx)).
-    Try(func() error {
-        return longRunningOperation()
+    TryCtx(func(ctx context.Context) error {
+        // ctx is passed directly into your function
+        return doSomething(ctx)
     }).
+    Finally(func() { /* always runs */ }).
     Do()
+// If ctx is cancelled before execution, returns context.Canceled
 ```
 
-### With Hooks for Observability
+### Observability with Hooks
 
 ```go
 gtc.New().
     ApplyOptions(gtc.WithHooks(gtc.Hooks{
-        OnTryStart: func() { log.Println("starting operation") },
-        OnTryEnd:   func(err error) { log.Printf("operation done: %v", err) },
-        OnCatch:    func(err error) { log.Printf("caught error: %v", err) },
-        OnFinally:  func() { log.Println("cleanup done") },
+        OnTryStart: func()                  { log.Println("try start") },
+        OnTryEnd:   func(err error)         { log.Printf("try end: %v", err) },
+        OnCatch:    func(err error)         { log.Printf("caught: %v", err) },
+        OnFinally:  func()                  { log.Println("finally") },
     })).
-    Try(func() error {
-        return riskyOperation()
-    }).
+    Try(func() error { return riskyOp() }).
     Do()
 ```
 
-### Generic Result Type
+### Object Pooling (Zero-alloc Reuse)
 
 ```go
-result, err := gtc.TryWithResult(func() (int, error) {
-    return 42, nil
-})
+pool := sync.Pool{New: func() any { return gtc.New() }}
 
-result, err := gtc.TryWithResultAndFinally(
-    func() (string, error) {
-        return "hello", nil
-    },
-    func() {
-        fmt.Println("cleanup")
-    },
-)
+// In a goroutine:
+tc := pool.Get().(*gtc.TryCatchBlock)
+tc.Try(func() error { return process() }).Do()
+tc.Reset()
+pool.Put(tc)
 ```
 
-### Object Pooling
-
-```go
-pool := sync.Pool{
-    New: func() interface{} {
-        return gtc.New()
-    },
-}
-
-for i := 0; i < 1000; i++ {
-    go func() {
-        tc := pool.Get().(*gtc.TryCatchBlock)
-        tc.Try(func() error {
-            return process()
-        }).Do()
-        tc.Reset()
-        pool.Put(tc)
-    }()
-}
-```
+`Reset()` clears all fields (try, catch, finally, context, hooks, name), making the instance safe to reuse. Benchmarks confirm **zero extra allocations** when using pool mode.
 
 ## Execution Flow
 
-```mermaid
-flowchart TD
-    A[Start Do] --> B{Context Check}
-    B -->|Cancelled| Z[Return context error]
-    B -->|OK| C[OnTryStart Hook]
-    C --> D[Execute Try Function]
-    D --> E[OnTryEnd Hook]
-    E --> F{Error occurred?}
-    F -->|Yes| G[OnCatch Hook]
-    F -->|No| H{Catch defined?}
-    G --> H
-    H -->|Yes| I[Execute Catch Handler]
-    H -->|No| J
-    I --> J[Finally Block]
-    J --> K[OnFinally Hook]
-    K --> L[Return Error]
-
-    D -->|Panic| M[Recover Panic]
-    M --> N[OnCatch Hook]
-    N --> J
-
-    style A fill:#f9f,color:#000
-    style L fill:#9f9,color:#000
-    style Z fill:#f99,color:#000
+```text
+Do()
+    ├─ context cancelled? ─── return ctx.Err(), finally
+    ├─ OnTryStart()
+    ├─ try() ── returns error ── OnTryEnd(err) ── OnCatch(err) ── catch(err) ── OnFinally() ── finally()
+    └─ try() ── panic ──────── recover() ──────────────────────── OnCatch(err) ── catch(err) ── OnFinally() ── finally()
+                                                                                   └─ catch panic? ── re-panic after finally
 ```
+
+**Key guarantee**: `finally` always executes exactly once, regardless of success, error, or panic paths. If `catch` itself panics, `finally` still runs before the panic propagates.
+
+## Performance
+
+Benchmark results on 12th Gen Intel i5-12400F:
+
+| Path                                | ns/op | allocs/op |
+| ----------------------------------- | ----: | --------: |
+| `Do()` no error (hot path)          |    ~8 |         0 |
+| `Do()` error + catch                |   ~28 |         1 |
+| `Do()` error + catch + finally      |   ~29 |         1 |
+| `Do()` panic                        |  ~113 |         1 |
+| `TryWithResult` no error            |    ~4 |         0 |
+| `TryCatchR` error + catch + finally |   ~10 |         0 |
+| `Pool` reuse (Get + Reset + Put)    |   ~17 |         0 |
+
+The hot (no-error) path allocates nothing. `Pool` mode is recommended for high-throughput scenarios — it eliminates all per-call allocations.
 
 ## Examples
 
-- [`examples/chain_call`](./examples/chain_call)
-- [`examples/concurrent_with_pool`](./examples/concurrent_with_pool)
+- [Chain call](./examples/chain_call)
+- [Concurrent with pool](./examples/concurrent_with_pool)
 
-## Learn More
+## Limitations
 
-- Go API reference: <https://pkg.go.dev/github.com/shengyanli1982/go-trycatch>
+- Not a replacement for `if err != nil` — a complement for cases where you need catch-finally semantics.
+- Error types are not matched by the library. Use `errors.Is` / `errors.As` inside your `Catch` handler.
+- Not goroutine-safe by design. One `TryCatchBlock` per goroutine (use `sync.Pool` for sharing).
 
 ## License
 
