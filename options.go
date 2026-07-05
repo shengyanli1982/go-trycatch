@@ -58,3 +58,12 @@ func (tc *TryCatchBlock) ApplyOptions(opts ...Option) *TryCatchBlock {
 	}
 	return tc
 }
+
+// NewWithOptions 创建一个 TryCatchBlock 实例并应用提供的选项
+func NewWithOptions(opts ...Option) *TryCatchBlock {
+	tc := &TryCatchBlock{}
+	for _, opt := range opts {
+		opt(tc)
+	}
+	return tc
+}

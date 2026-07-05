@@ -257,3 +257,33 @@ func TestApplyOptions(t *testing.T) {
 	assert.Equal(t, ctx, tc.ctx)
 	assert.Equal(t, "test-block", tc.name)
 }
+
+func TestNewWithOptions_Single(t *testing.T) {
+	ctx := context.Background()
+	tc := NewWithOptions(WithContext(ctx))
+	assert.Equal(t, ctx, tc.ctx)
+	assert.NotNil(t, tc)
+}
+
+func TestNewWithOptions_Multiple(t *testing.T) {
+	ctx := context.Background()
+	tc := NewWithOptions(
+		WithContext(ctx),
+		WithName("multi-block"),
+		WithHooks(Hooks{
+			OnTryStart: func() {},
+		}),
+	)
+
+	assert.Equal(t, ctx, tc.ctx)
+	assert.Equal(t, "multi-block", tc.Name())
+	assert.NotNil(t, tc.Hooks().OnTryStart)
+}
+
+func TestNewWithOptions_NoOptions(t *testing.T) {
+	tc := NewWithOptions()
+	assert.NotNil(t, tc)
+	assert.Nil(t, tc.ctx)
+	assert.Equal(t, "", tc.Name())
+	assert.Equal(t, Hooks{}, tc.Hooks())
+}

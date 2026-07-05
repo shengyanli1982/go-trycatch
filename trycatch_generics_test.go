@@ -130,3 +130,130 @@ func TestTryWithResult_WithStruct(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, Person{Name: "Alice", Age: 30}, result)
 }
+
+func TestTryCatchR_Success(t *testing.T) {
+	finallyCalled := false
+
+	result, err := TryCatchR(
+		func() (int, error) {
+			return 42, nil
+		},
+		nil,
+		func() {
+			finallyCalled = true
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 42, result)
+	assert.True(t, finallyCalled, "finally should be called on success")
+}
+
+func TestTryCatchR_WithError(t *testing.T) {
+	var caughtErr error
+	finallyCalled := false
+
+	result, err := TryCatchR(
+		func() (string, error) {
+			return "", errors.New("try error")
+		},
+		func(err error) {
+			caughtErr = err
+		},
+		func() {
+			finallyCalled = true
+		},
+	)
+
+	assert.Error(t, err)
+	assert.Equal(t, "try error", err.Error())
+	assert.NotNil(t, caughtErr)
+	assert.Equal(t, "try error", caughtErr.Error())
+	assert.Equal(t, "", result)
+	assert.True(t, finallyCalled, "finally should be called on error")
+}
+
+func TestTryCatchR_WithPanic(t *testing.T) {
+	var caughtErr error
+	finallyCalled := false
+
+	result, err := TryCatchR(
+		func() (int, error) {
+			panic("panic in try")
+		},
+		func(err error) {
+			caughtErr = err
+		},
+		func() {
+			finallyCalled = true
+		},
+	)
+
+	assert.Error(t, err)
+	assert.Equal(t, "panic in try", err.Error())
+	assert.NotNil(t, caughtErr)
+	assert.Equal(t, "panic in try", caughtErr.Error())
+	assert.Equal(t, 0, result)
+	assert.True(t, finallyCalled, "finally should be called on panic")
+}
+
+func TestTryCatchR_FinallyAlwaysRuns(t *testing.T) {
+	finallyCount := 0
+
+	// finally on success
+	TryCatchR[int](
+		func() (int, error) { return 1, nil },
+		nil,
+		func() { finallyCount++ },
+	)
+
+	// finally on error
+	TryCatchR[int](
+		func() (int, error) { return 0, errors.New("err") },
+		nil,
+		func() { finallyCount++ },
+	)
+
+	// finally on panic
+	TryCatchR[int](
+		func() (int, error) { panic("p") },
+		nil,
+		func() { finallyCount++ },
+	)
+
+	assert.Equal(t, 3, finallyCount, "finally should run in all three scenarios")
+}
+
+func TestTryCatchR_NilCatchNilFinally(t *testing.T) {
+	result, err := TryCatchR(
+		func() (int, error) {
+			return 100, errors.New("no catcher")
+		},
+		nil,
+		nil,
+	)
+
+	assert.Error(t, err)
+	assert.Equal(t, "no catcher", err.Error())
+	assert.Equal(t, 100, result)
+}
+
+func TestTryCatchR_CatchPanic(t *testing.T) {
+	finallyCalled := false
+
+	assert.Panics(t, func() {
+		TryCatchR[int](
+			func() (int, error) {
+				return 0, errors.New("original error")
+			},
+			func(err error) {
+				panic("panic in catch")
+			},
+			func() {
+				finallyCalled = true
+			},
+		)
+	}, "should propagate catch panic")
+
+	assert.True(t, finallyCalled, "finally should run even when catch panics")
+}

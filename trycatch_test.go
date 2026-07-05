@@ -569,3 +569,93 @@ func TestTryCatchBlock_Do_NilTryReturnsNil(t *testing.T) {
 
 	assert.NoError(t, err, "Do() must return nil when try is nil")
 }
+
+func TestTryCatchBlock_TryCtx_ContextPassed(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "key", "value")
+	var receivedCtx context.Context
+
+	err := New().
+		ApplyOptions(WithContext(ctx)).
+		TryCtx(func(ctx context.Context) error {
+			receivedCtx = ctx
+			return nil
+		}).
+		Do()
+
+	assert.NoError(t, err)
+	assert.NotNil(t, receivedCtx)
+	assert.Equal(t, "value", receivedCtx.Value("key"))
+}
+
+func TestTryCatchBlock_TryCtx_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	tryCalled := false
+	finallyCalled := false
+
+	err := New().
+		ApplyOptions(WithContext(ctx)).
+		TryCtx(func(ctx context.Context) error {
+			tryCalled = true
+			return nil
+		}).
+		Catch(func(err error) {
+			t.Error("catch should not be called when context is cancelled")
+		}).
+		Finally(func() {
+			finallyCalled = true
+		}).
+		Do()
+
+	assert.Equal(t, context.Canceled, err)
+	assert.False(t, tryCalled, "try should not be called when context is cancelled")
+	assert.True(t, finallyCalled, "finally should be called even when context is cancelled")
+}
+
+func TestTryCatchBlock_TryCtx_WithError(t *testing.T) {
+	var caughtErr error
+
+	err := New().
+		ApplyOptions(WithContext(context.Background())).
+		TryCtx(func(ctx context.Context) error {
+			return errors.New("tryCtx error")
+		}).
+		Catch(func(err error) {
+			caughtErr = err
+		}).
+		Do()
+
+	assert.Error(t, err)
+	assert.Equal(t, "tryCtx error", err.Error())
+	assert.NotNil(t, caughtErr)
+	assert.Equal(t, "tryCtx error", caughtErr.Error())
+}
+
+func TestTryCatchBlock_TryCtx_NilContext(t *testing.T) {
+	var receivedCtx context.Context
+
+	err := New().
+		TryCtx(func(ctx context.Context) error {
+			receivedCtx = ctx
+			return nil
+		}).
+		Do()
+
+	assert.NoError(t, err)
+	assert.NotNil(t, receivedCtx, "should use context.Background() when ctx is nil")
+}
+
+func TestTryCatchBlock_TryCtx_Reset(t *testing.T) {
+	tc := New().
+		ApplyOptions(WithContext(context.Background())).
+		TryCtx(func(ctx context.Context) error {
+			return nil
+		})
+
+	assert.NotNil(t, tc.tryCtx)
+
+	tc.Reset()
+
+	assert.Nil(t, tc.tryCtx, "tryCtx should be nil after Reset")
+}
