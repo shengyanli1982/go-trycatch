@@ -7,12 +7,6 @@ import (
 // Option 定义 TryCatchBlock 的配置选项
 type Option func(*TryCatchBlock)
 
-// TryCatchBlockWithOptions 扩展 TryCatchBlock 添加额外配置
-type TryCatchBlockWithOptions struct {
-	*TryCatchBlock
-	options []Option
-}
-
 // WithContext 添加 context 支持，用于取消和超时控制
 func WithContext(ctx context.Context) Option {
 	return func(tc *TryCatchBlock) {

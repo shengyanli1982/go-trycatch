@@ -533,3 +533,39 @@ func TestTryCatchBlock_Do_PanicCatchCalled(t *testing.T) {
 	assert.NotNil(t, caughtErrInCatch, "catch should receive the panic error")
 	assert.Equal(t, "try panic", caughtErrInCatch.Error())
 }
+
+func TestTryCatchBlock_Do_NilTryFinallyExecutes(t *testing.T) {
+	finallyCalled := false
+
+	err := New().
+		Finally(func() {
+			finallyCalled = true
+		}).
+		Do()
+
+	assert.NoError(t, err)
+	assert.True(t, finallyCalled, "finally must execute when try is nil")
+}
+
+func TestTryCatchBlock_Do_NilTryWithOnFinally(t *testing.T) {
+	onFinallyCalled := false
+
+	err := New().
+		ApplyOptions(WithHooks(Hooks{
+			OnFinally: func() { onFinallyCalled = true },
+		})).
+		Do()
+
+	assert.NoError(t, err)
+	assert.True(t, onFinallyCalled, "OnFinally hook must execute when try is nil")
+}
+
+func TestTryCatchBlock_Do_NilTryReturnsNil(t *testing.T) {
+	err := New().
+		Catch(func(err error) {
+			t.Error("catch should not be called when try is nil")
+		}).
+		Do()
+
+	assert.NoError(t, err, "Do() must return nil when try is nil")
+}

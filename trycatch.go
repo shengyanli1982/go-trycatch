@@ -52,10 +52,6 @@ func (tc *TryCatchBlock) Finally(finally func()) *TryCatchBlock {
 // Do 执行 try-catch-finally 流程，返回错误
 // 返回 try 返回的错误或 panic 转换的错误
 func (tc *TryCatchBlock) Do() (err error) {
-	if tc.try == nil {
-		return nil
-	}
-
 	var (
 		ctxCancelled  bool
 		catchCalled   bool
@@ -116,6 +112,10 @@ func (tc *TryCatchBlock) Do() (err error) {
 			panic(catchPanicErr)
 		}
 	}()
+
+	if tc.try == nil {
+		return nil
+	}
 
 	// 检查 context 是否已取消（不再 early return，让 defer 统一处理 finally）
 	if tc.ctx != nil {
