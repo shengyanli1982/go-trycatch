@@ -5,6 +5,22 @@ import (
 	"fmt"
 )
 
+// stringError 是一个轻量级的 error 实现，用于将非 error 类型的 panic 值转换为 error。
+// 相比 fmt.Errorf，它避免了额外的分配和 fmt 包的开销。
+type stringError struct {
+	msg string
+}
+
+func (e stringError) Error() string { return e.msg }
+
+// catchGuard 在隔离环境中执行 catch 函数，捕获 catch 内部的 panic 并返回。
+// 返回 nil 表示 catch 正常执行完毕；返回非 nil 表示 catch 发生了 panic。
+func catchGuard(fn func(error), err error) (panicVal any) {
+	defer func() { panicVal = recover() }()
+	fn(err)
+	return
+}
+
 // TryCatchBlock 实现 try-catch-finally 错误处理模式
 type TryCatchBlock struct {
 	try     func() error              // 待执行的函数，可能返回错误
@@ -77,18 +93,16 @@ func (tc *TryCatchBlock) Do() (err error) {
 			switch v := r.(type) {
 			case error:
 				panicErr = v
+			case string:
+				panicErr = stringError{v}
 			default:
-				panicErr = fmt.Errorf("%v", v)
+				panicErr = stringError{fmt.Sprintf("%v", v)}
 			}
 			if tc.hooks.OnCatch != nil {
 				tc.hooks.OnCatch(panicErr)
 			}
-			// 用内层 IIFE 保护 catch，防止 catch panic 阻止 finally 执行
 			if tc.catch != nil && !catchCalled {
-				func() {
-					defer func() { catchPanicErr = recover() }()
-					tc.catch(panicErr)
-				}()
+				catchPanicErr = catchGuard(tc.catch, panicErr)
 			}
 			returnedErr = panicErr
 			err = panicErr
@@ -99,15 +113,12 @@ func (tc *TryCatchBlock) Do() (err error) {
 				if tc.hooks.OnCatch != nil {
 					tc.hooks.OnCatch(returnedErr)
 				}
-				func() {
-					defer func() { catchPanicErr = recover() }()
-					tc.catch(returnedErr)
-				}()
+				catchPanicErr = catchGuard(tc.catch, returnedErr)
 			}
 			err = returnedErr
 		}
 
-		// finally 始终执行（即使 catch panic 了，也会被上层 IIFE 捕获）
+		// finally 始终执行（catch panic 已被 catchGuard 隔离）
 		if tc.hooks.OnFinally != nil {
 			tc.hooks.OnFinally()
 		}

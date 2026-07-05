@@ -11,8 +11,10 @@ func TryWithResult[T any](fn func() (T, error)) (result T, err error) {
 			switch v := r.(type) {
 			case error:
 				err = v
+			case string:
+				err = stringError{v}
 			default:
-				err = fmt.Errorf("%v", v)
+				err = stringError{fmt.Sprintf("%v", v)}
 			}
 		}
 	}()
@@ -27,8 +29,10 @@ func TryWithResultAndFinally[T any](fn func() (T, error), finally func()) (resul
 			switch v := r.(type) {
 			case error:
 				err = v
+			case string:
+				err = stringError{v}
 			default:
-				err = fmt.Errorf("%v", v)
+				err = stringError{fmt.Sprintf("%v", v)}
 			}
 		}
 		if finally != nil {
@@ -48,15 +52,14 @@ func TryCatchR[T any](fn func() (T, error), catch func(error), finally func()) (
 			switch v := r.(type) {
 			case error:
 				err = v
+			case string:
+				err = stringError{v}
 			default:
-				err = fmt.Errorf("%v", v)
+				err = stringError{fmt.Sprintf("%v", v)}
 			}
 		}
 		if err != nil && catch != nil {
-			func() {
-				defer func() { catchPanicErr = recover() }()
-				catch(err)
-			}()
+			catchPanicErr = catchGuard(catch, err)
 		}
 		if finally != nil {
 			finally()
