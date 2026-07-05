@@ -41,6 +41,8 @@ func TryWithResultAndFinally[T any](fn func() (T, error), finally func()) (resul
 
 // TryCatchR 执行带泛型返回值的 try-catch-finally 流程，捕获 panic 并转换为错误
 func TryCatchR[T any](fn func() (T, error), catch func(error), finally func()) (result T, err error) {
+	var catchPanicErr any
+
 	defer func() {
 		if r := recover(); r != nil {
 			switch v := r.(type) {
@@ -52,19 +54,15 @@ func TryCatchR[T any](fn func() (T, error), catch func(error), finally func()) (
 		}
 		if err != nil && catch != nil {
 			func() {
-				defer func() {
-					if p := recover(); p != nil {
-						if finally != nil {
-							finally()
-						}
-						panic(p)
-					}
-				}()
+				defer func() { catchPanicErr = recover() }()
 				catch(err)
 			}()
 		}
 		if finally != nil {
 			finally()
+		}
+		if catchPanicErr != nil {
+			panic(catchPanicErr)
 		}
 	}()
 

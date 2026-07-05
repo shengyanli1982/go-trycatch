@@ -257,3 +257,23 @@ func TestTryCatchR_CatchPanic(t *testing.T) {
 
 	assert.True(t, finallyCalled, "finally should run even when catch panics")
 }
+
+func TestTryCatchR_CatchPanicAfterFnPanic(t *testing.T) {
+	finallyCount := 0
+
+	assert.Panics(t, func() {
+		TryCatchR[int](
+			func() (int, error) {
+				panic("panic in fn")
+			},
+			func(err error) {
+				panic("panic in catch")
+			},
+			func() {
+				finallyCount++
+			},
+		)
+	}, "should propagate catch panic")
+
+	assert.Equal(t, 1, finallyCount, "finally must be called exactly once when both fn and catch panic")
+}

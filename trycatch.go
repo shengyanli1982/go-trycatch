@@ -157,6 +157,5 @@ func (tc *TryCatchBlock) Do() (err error) {
 		tc.hooks.OnTryEnd(returnedErr)
 	}
 
-	err = returnedErr
 	return
 }
