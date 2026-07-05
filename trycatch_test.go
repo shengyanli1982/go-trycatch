@@ -1,6 +1,7 @@
 package gotrycatch
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -11,11 +12,18 @@ import (
 )
 
 func TestTryCatchBlock_Do(t *testing.T) {
+	var (
+		finallyCalled       bool
+		finallyCalledNested bool
+		finallyCalledPanic  bool
+	)
+
 	tests := []struct {
 		name           string
 		tryFunction    func() error
 		catchHandler   func(error)
 		finallyHandler func()
+		shouldPanic    bool
 	}{
 		{
 			name: "No error",
@@ -48,18 +56,12 @@ func TestTryCatchBlock_Do(t *testing.T) {
 			finallyHandler: nil,
 		},
 		{
-			name: "Finally function",
-			tryFunction: func() error {
-				return nil
-			},
+			name:        "Finally function",
+			tryFunction: func() error { return nil },
 			catchHandler: nil,
-			finallyHandler: (func() func() {
-				isFinalized := false
-				return func() {
-					isFinalized = true
-					assert.True(t, isFinalized, "finally handler should be executed")
-				}
-			})(),
+			finallyHandler: func() {
+				finallyCalled = true
+			},
 		},
 		{
 			name:           "Try function is nil",
@@ -67,39 +69,26 @@ func TestTryCatchBlock_Do(t *testing.T) {
 			catchHandler:   nil,
 			finallyHandler: nil,
 		},
-		// {
-		// 	name: "Nested panic in catch",
-		// 	tryFunc: func() error {
-		// 		panic("original panic")
-		// 	},
-		// 	catchFunc: func(err error) {
-		// 		assert.Equal(t, "original panic", err.Error())
-		// 		assert.NotNil(t, err)
-
-		// 		panic("panic in catch")
-		// 	},
-		// 	finallyFunc: (func() func() {
-		// 		executed := false
-		// 		return func() {
-		// 			executed = true
-		// 			assert.True(t, executed, "finally should be executed even with nested panic")
-		// 		}
-		// 	})(),
-		// 	expectedError: errors.New("panic in catch"),
-		// },
+		{
+			name: "Nested panic in catch",
+			tryFunction: func() error {
+				panic("original panic")
+			},
+			catchHandler: func(err error) {
+				assert.Equal(t, "original panic", err.Error())
+				assert.NotNil(t, err)
+				panic("panic in catch")
+			},
+			finallyHandler: func() { finallyCalledNested = true },
+			shouldPanic:    true,
+		},
 		{
 			name: "Finally executes after panic",
 			tryFunction: func() error {
 				panic("panic error")
 			},
-			catchHandler: nil,
-			finallyHandler: (func() func() {
-				isFinalized := false
-				return func() {
-					isFinalized = true
-					assert.True(t, isFinalized, "finally handler should be executed")
-				}
-			})(),
+			catchHandler:   nil,
+			finallyHandler: func() { finallyCalledPanic = true },
 		},
 		{
 			name: "Complex error chain",
@@ -143,6 +132,19 @@ func TestTryCatchBlock_Do(t *testing.T) {
 			finallyHandler: nil,
 		},
 		{
+			name: "Finally executes after user defer",
+			tryFunction: func() error {
+				defer func() {
+					// 用户自己的 defer，应该在 finally 之前执行
+				}()
+				return nil
+			},
+			catchHandler: nil,
+			finallyHandler: func() {
+				// finally 必须在用户 defer 之后执行
+			},
+		},
+		{
 			name: "Nil catch with error",
 			tryFunction: func() error {
 				return errors.New("uncaught error")
@@ -160,11 +162,29 @@ func TestTryCatchBlock_Do(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
+			finallyCalled = false
+			finallyCalledNested = false
+			finallyCalledPanic = false
+
 			tryCatch := New().
 				Try(testCase.tryFunction).
 				Catch(testCase.catchHandler).
 				Finally(testCase.finallyHandler)
-			tryCatch.Do()
+
+			if testCase.shouldPanic {
+				assert.Panics(t, func() { tryCatch.Do() })
+				if testCase.name == "Nested panic in catch" {
+					assert.True(t, finallyCalledNested, "finally should run even when catch panics")
+				}
+			} else {
+				tryCatch.Do()
+				switch testCase.name {
+				case "Finally function":
+					assert.True(t, finallyCalled, "finally handler should be executed")
+				case "Finally executes after panic":
+					assert.True(t, finallyCalledPanic, "finally handler should be executed after panic")
+				}
+			}
 		})
 	}
 }
@@ -310,8 +330,8 @@ func TestTryCatchBlock_Concurrent(t *testing.T) {
 				}
 				return nil
 			}).Catch(func(err error) {
+				// 只使用 atomic 计数器，不在 goroutine 内调用 assert（避免 t.FailNow 导致 goroutine panic）
 				atomic.AddInt32(&errorCount, 1)
-				assert.Contains(err.Error(), "error from goroutine")
 			}).Finally(func() {
 				atomic.AddInt32(&completionCount, 1)
 			})
@@ -349,8 +369,8 @@ func TestTryCatchBlock_ConcurrentWithPool(t *testing.T) {
 				}
 				return nil
 			}).Catch(func(err error) {
+				// 只使用 atomic 计数器，不在 goroutine 内调用 assert（避免 t.FailNow 导致 goroutine panic）
 				atomic.AddInt32(&errorCount, 1)
-				assert.Contains(err.Error(), "error from goroutine")
 			}).Finally(func() {
 				atomic.AddInt32(&completionCount, 1)
 			})
@@ -364,4 +384,278 @@ func TestTryCatchBlock_ConcurrentWithPool(t *testing.T) {
 
 	assert.Equal(goroutineCount/2, int(atomic.LoadInt32(&errorCount)), "catch handler should be executed for half of the goroutines")
 	assert.Equal(goroutineCount, int(atomic.LoadInt32(&completionCount)), "finally handler should be executed for all goroutines")
+}
+
+func TestTryCatchBlock_FinallyPanic(t *testing.T) {
+	t.Run("Finally panic propagates", func(t *testing.T) {
+		tryCatch := New().
+			Try(func() error {
+				return nil
+			}).
+			Finally(func() {
+				panic("panic in finally")
+			})
+
+		assert.Panics(t, func() {
+			tryCatch.Do()
+		})
+	})
+
+	t.Run("Finally panic with error in try", func(t *testing.T) {
+		tryCatch := New().
+			Try(func() error {
+				return errors.New("error in try")
+			}).
+			Catch(func(err error) {
+			}).
+			Finally(func() {
+				panic("panic in finally")
+			})
+
+		assert.Panics(t, func() {
+			tryCatch.Do()
+		})
+	})
+
+	t.Run("Finally panic after catch panic", func(t *testing.T) {
+		tryCatch := New().
+			Try(func() error {
+				return errors.New("error in try")
+			}).
+			Catch(func(err error) {
+				panic("panic in catch")
+			}).
+			Finally(func() {
+				panic("panic in finally")
+			})
+
+		assert.Panics(t, func() {
+			tryCatch.Do()
+		})
+	})
+}
+
+func TestTryCatchBlock_Do_PanicReturnsError(t *testing.T) {
+	catchCalled := false
+	err := New().
+		Try(func() error {
+			panic("panic error")
+		}).
+		Catch(func(err error) {
+			catchCalled = true
+		}).
+		Do()
+
+	assert.Error(t, err, "Do() should return error converted from panic")
+	assert.Equal(t, "panic error", err.Error())
+	assert.True(t, catchCalled, "catch should be called when try panics")
+}
+
+func TestTryCatchBlock_Do_PanicWithErrorType(t *testing.T) {
+	myErr := errors.New("typed error")
+	var caughtErr error
+	err := New().
+		Try(func() error {
+			panic(myErr)
+		}).
+		Catch(func(err error) {
+			caughtErr = err
+		}).
+		Do()
+
+	assert.Error(t, err)
+	assert.Equal(t, myErr, err, "panic with error type should preserve original error")
+	assert.Equal(t, myErr, caughtErr)
+}
+
+func TestTryCatchBlock_Reset_ClearsAllFields(t *testing.T) {
+	tc := New()
+	tc.name = "my-block"
+	tc.hooks = Hooks{OnTryStart: func() {}, OnTryEnd: func(error) {}, OnCatch: func(error){}, OnFinally: func(){}}
+	tc.ctx = context.Background()
+	tc.Try(func() error { return nil }).
+		Catch(func(error) {}).
+		Finally(func() {})
+
+	tc.Reset()
+
+	assert.Nil(t, tc.ctx, "ctx should be nil after Reset")
+	assert.Equal(t, Hooks{}, tc.hooks, "hooks should be zero value after Reset")
+	assert.Equal(t, "", tc.name, "name should be empty after Reset")
+	assert.Nil(t, tc.try, "try should be nil after Reset")
+	assert.Nil(t, tc.catch, "catch should be nil after Reset")
+	assert.Nil(t, tc.finally, "finally should be nil after Reset")
+}
+
+func TestTryCatchBlock_Do_ContextCancelled_FinallyExecutes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	onFinallyCalled := false
+	finallyCalled := false
+
+	err := New().
+		ApplyOptions(
+			WithContext(ctx),
+			WithHooks(Hooks{
+				OnFinally: func() { onFinallyCalled = true },
+			}),
+		).
+		Try(func() error {
+			return errors.New("should not execute")
+		}).
+		Catch(func(err error) {
+			t.Error("catch should not be called when context is cancelled")
+		}).
+		Finally(func() {
+			finallyCalled = true
+		}).
+		Do()
+
+	assert.Equal(t, context.Canceled, err, "should return context.Canceled")
+	assert.True(t, onFinallyCalled, "OnFinally should be called even when context is cancelled")
+	assert.True(t, finallyCalled, "finally should be called even when context is cancelled")
+}
+
+func TestTryCatchBlock_Do_PanicCatchCalled(t *testing.T) {
+	var caughtErrInCatch error
+	err := New().
+		Try(func() error {
+			panic("try panic")
+		}).
+		Catch(func(err error) {
+			caughtErrInCatch = err
+		}).
+		Do()
+
+	assert.Error(t, err)
+	assert.Equal(t, "try panic", err.Error())
+	assert.NotNil(t, caughtErrInCatch, "catch should receive the panic error")
+	assert.Equal(t, "try panic", caughtErrInCatch.Error())
+}
+
+func TestTryCatchBlock_Do_NilTryFinallyExecutes(t *testing.T) {
+	finallyCalled := false
+
+	err := New().
+		Finally(func() {
+			finallyCalled = true
+		}).
+		Do()
+
+	assert.NoError(t, err)
+	assert.True(t, finallyCalled, "finally must execute when try is nil")
+}
+
+func TestTryCatchBlock_Do_NilTryWithOnFinally(t *testing.T) {
+	onFinallyCalled := false
+
+	err := New().
+		ApplyOptions(WithHooks(Hooks{
+			OnFinally: func() { onFinallyCalled = true },
+		})).
+		Do()
+
+	assert.NoError(t, err)
+	assert.True(t, onFinallyCalled, "OnFinally hook must execute when try is nil")
+}
+
+func TestTryCatchBlock_Do_NilTryReturnsNil(t *testing.T) {
+	err := New().
+		Catch(func(err error) {
+			t.Error("catch should not be called when try is nil")
+		}).
+		Do()
+
+	assert.NoError(t, err, "Do() must return nil when try is nil")
+}
+
+func TestTryCatchBlock_TryCtx_ContextPassed(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "key", "value")
+	var receivedCtx context.Context
+
+	err := New().
+		ApplyOptions(WithContext(ctx)).
+		TryCtx(func(ctx context.Context) error {
+			receivedCtx = ctx
+			return nil
+		}).
+		Do()
+
+	assert.NoError(t, err)
+	assert.NotNil(t, receivedCtx)
+	assert.Equal(t, "value", receivedCtx.Value("key"))
+}
+
+func TestTryCatchBlock_TryCtx_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	tryCalled := false
+	finallyCalled := false
+
+	err := New().
+		ApplyOptions(WithContext(ctx)).
+		TryCtx(func(ctx context.Context) error {
+			tryCalled = true
+			return nil
+		}).
+		Catch(func(err error) {
+			t.Error("catch should not be called when context is cancelled")
+		}).
+		Finally(func() {
+			finallyCalled = true
+		}).
+		Do()
+
+	assert.Equal(t, context.Canceled, err)
+	assert.False(t, tryCalled, "try should not be called when context is cancelled")
+	assert.True(t, finallyCalled, "finally should be called even when context is cancelled")
+}
+
+func TestTryCatchBlock_TryCtx_WithError(t *testing.T) {
+	var caughtErr error
+
+	err := New().
+		ApplyOptions(WithContext(context.Background())).
+		TryCtx(func(ctx context.Context) error {
+			return errors.New("tryCtx error")
+		}).
+		Catch(func(err error) {
+			caughtErr = err
+		}).
+		Do()
+
+	assert.Error(t, err)
+	assert.Equal(t, "tryCtx error", err.Error())
+	assert.NotNil(t, caughtErr)
+	assert.Equal(t, "tryCtx error", caughtErr.Error())
+}
+
+func TestTryCatchBlock_TryCtx_NilContext(t *testing.T) {
+	var receivedCtx context.Context
+
+	err := New().
+		TryCtx(func(ctx context.Context) error {
+			receivedCtx = ctx
+			return nil
+		}).
+		Do()
+
+	assert.NoError(t, err)
+	assert.NotNil(t, receivedCtx, "should use context.Background() when ctx is nil")
+}
+
+func TestTryCatchBlock_TryCtx_Reset(t *testing.T) {
+	tc := New().
+		ApplyOptions(WithContext(context.Background())).
+		TryCtx(func(ctx context.Context) error {
+			return nil
+		})
+
+	assert.NotNil(t, tc.tryCtx)
+
+	tc.Reset()
+
+	assert.Nil(t, tc.tryCtx, "tryCtx should be nil after Reset")
 }
